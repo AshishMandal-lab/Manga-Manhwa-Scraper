@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery Scraper</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ cache_buster }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <style>
+        .tag-input-container { background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem; display: flex; flex-wrap: wrap; align-items: center; cursor: text; transition: all 0.3s ease; }
+        .tag-input-container:focus-within { border-color: var(--accent-primary); box-shadow: 0 0 0 0.25rem rgba(187, 154, 247, 0.35); }
+        .tag-pill { background-color: var(--accent-primary); color: var(--text-heading); padding: 0.25rem 0.75rem; border-radius: 1rem; margin: 0.25rem; display: flex; align-items: center; font-size: 0.9rem; font-weight: 600; }
+        .tag-pill .tag-remove { margin-left: 0.5rem; cursor: pointer; font-weight: bold; opacity: 0.7; }
+        .tag-pill .tag-remove:hover { opacity: 1; }
+        #tag-input-field { flex-grow: 1; border: none; background: none; outline: none; color: var(--text-primary); padding: 0.5rem; min-width: 150px; }
+    </style>
+</head>
+<body>
+    <div class="animation-container">
+        <div data-group="start" class="sphere" style="width: 200px; height: 200px;"><h3>Start</h3></div>
+        <div data-group="choice" id="choice-anime" class="sphere" style="width: 180px; height: 180px;"><h4>Anime</h4></div>
+        <div data-group="choice" id="choice-hentai" class="sphere" style="width: 180px; height: 180px;"><h4>Hentai</h4></div>
+        
+        <div data-group="anime-sites" class="sphere" style="width: 220px; height: 220px; cursor: default;"><h3>Select a Site</h3></div>
+        <div data-group="anime-sites" class="sphere anime-site-option" data-site="bato" style="width: 120px; height: 120px;"><h5>Bato.to</h5></div>
+
+        <div data-group="sites" class="sphere" style="width: 220px; height: 220px; cursor: default;"><h3>Pick Your Poison</h3></div>
+        <div data-group="sites" class="sphere site-option" data-site="ehentai" style="width: 120px; height: 120px;"><h5>E-Hentai</h5></div>
+        <div data-group="sites" class="sphere site-option" data-site="nhentai" style="width: 120px; height: 120px;"><h5>N-Hentai</h5></div>
+        <div data-group="sites" class="sphere site-option" data-site="rule34" style="width: 120px; height: 120px;"><h5>Rule34</h5></div>
+        <div data-group="sites" class="sphere imhentai-site-option" data-site="imhentai" style="width: 120px; height: 120px;"><h5>ImHentai</h5></div>
+
+        <div data-group="mode" id="selected-site-sphere" class="sphere" style="width: 220px; height: 220px; cursor: default;"><h3 id="selected-site-title"></h3></div>
+        <div data-group="mode" class="sphere mode-option" data-mode="direct" style="width: 120px; height: 120px;"><h5>Link</h5></div>
+        <div data-group="mode" class="sphere mode-option" data-mode="tags" style="width: 120px; height: 120px;"><h5>Tags</h5></div>
+        
+        <div data-group="form" class="form-wrapper card-glass">
+             <form id="main-form" action="/scrape" method="POST" onsubmit="prepareFormForSubmit()">
+                <input type="hidden" name="site">
+                <input type="hidden" name="mode">
+                <div id="final-form-content"></div>
+                <div class="d-grid mt-4"><button type="submit" class="btn btn-primary btn-lg">Start Scraping</button></div>
+                <div class="text-center"><button type="button" id="form-back-button" class="btn btn-back">← Go Back</button></div>
+             </form>
+        </div>
+    </div>
+
+    <a href="{{ url_for('gallery') }}" class="btn btn-outline-light" style="position: absolute; top: 20px; right: 20px;">View Gallery Library</a>
+
+    <script>
+        let currentGroup = 'start';
+        const mainForm = document.getElementById('main-form');
+        const finalFormContent = document.getElementById('final-form-content');
+
+        function exitGroup(groupName, onComplete) {
+            const elements = document.querySelectorAll(`[data-group="${groupName}"]`);
+            anime({
+                targets: elements, scale: 0, opacity: 0, translateX: 0, translateY: 0,
+                duration: 400, easing: 'easeInBack', delay: anime.stagger(50, {from: 'center'}),
+                complete: () => {
+                    elements.forEach(el => el.style.display = 'none');
+                    if (onComplete) onComplete();
+                }
+            });
+        }
+
+        function enterGroup(groupName) {
+            const elements = document.querySelectorAll(`[data-group="${groupName}"]`);
+            elements.forEach(el => { el.style.display = (el.classList.contains('sphere') || el.classList.contains('form-wrapper')) ? 'flex' : 'block'; });
+            anime.set(elements, { scale: 0, opacity: 0, translateX: 0, translateY: 0 });
+
+            if (groupName === 'start') { anime({ targets: `[data-group="start"]`, scale: [0, 1], opacity: [0, 1], duration: 800 }); } 
+            else if (groupName === 'choice') {
+                anime({ targets: '#choice-anime', translateX: -150, scale: 1, opacity: 1, duration: 800, easing: 'easeOutExpo' });
+                anime({ targets: '#choice-hentai', translateX: 150, scale: 1, opacity: 1, duration: 800, easing: 'easeOutExpo' });
+            } else if (groupName === 'sites') {
+                // UPDATE this section for the new sphere
+                const [center, eh, nh, r34, imh] = elements;
+                anime({ targets: center, scale: 1, opacity: 1, translateY: -150, duration: 500 });
+                anime({ targets: eh,  translateX: -150, translateY: 50, scale: 1, opacity: 1, delay: 100 });
+                anime({ targets: nh,  translateX: 150,  translateY: 50, scale: 1, opacity: 1, delay: 200 });
+                anime({ targets: r34, translateX: -150, translateY: 200, scale: 1, opacity: 1, delay: 300 });
+                anime({ targets: imh, translateX: 150, translateY: 200, scale: 1, opacity: 1, delay: 400 });
+            } else if (groupName === 'anime-sites') {
+                const [center, bato] = elements;
+                anime({ targets: center, scale: 1, opacity: 1, duration: 500 });
+                anime({ targets: bato, translateY: 150, scale: 1, opacity: 1, delay: 100 });
+            } else if (groupName === 'mode') {
+                const [center, link, tags] = elements;
+                anime({ targets: center, scale: 1, opacity: 1, duration: 500 });
+                anime({ targets: link, translateX: -150, scale: 1, opacity: 1, delay: 100 });
+                anime({ targets: tags, translateX: 150, scale: 1, opacity: 1, delay: 200 });
+            } else if (groupName === 'form') { anime({ targets: '[data-group="form"]', scale: [0.9, 1], opacity: [0, 1], duration: 500, easing: 'easeOutQuad' }); }
+        }
+
+        function transitionTo(nextGroup) {
+            exitGroup(currentGroup, () => {
+                currentGroup = nextGroup;
+                enterGroup(nextGroup);
+            });
+        }
+
+        function setupTagInput() {
+            const container = document.getElementById('tag-input-container');
+            if (!container) return;
+            const inputField = document.getElementById('tag-input-field');
+            container.addEventListener('click', () => inputField.focus());
+            inputField.addEventListener('keyup', (e) => {
+                if (e.key === ',' || e.key === 'Enter') {
+                    e.preventDefault();
+                    const tagText = inputField.value.trim().replace(/,/g, '');
+                    if (tagText) {
+                        const pill = document.createElement('div');
+                        pill.className = 'tag-pill';
+                        pill.textContent = tagText;
+                        const removeBtn = document.createElement('span');
+                        removeBtn.className = 'tag-remove';
+                        removeBtn.textContent = '×';
+                        removeBtn.onclick = (ev) => { ev.stopPropagation(); pill.remove(); };
+                        pill.appendChild(removeBtn);
+                        inputField.before(pill);
+                        inputField.value = '';
+                    }
+                }
+            });
+        }
+        
+        function prepareFormForSubmit() {
+            if (mainForm.mode.value === 'tags') {
+                const container = document.getElementById('tag-input-container');
+                const pills = container.querySelectorAll('.tag-pill');
+                const hiddenTagsInput = document.querySelector('input[name="tags"]');
+                if(hiddenTagsInput) {
+                    hiddenTagsInput.value = Array.from(pills).map(p => p.textContent.slice(0, -1).trim()).join(',');
+                }
+            }
+        }
+        
+        document.querySelector('[data-group="start"]').addEventListener('click', () => transitionTo('choice'));
+        document.getElementById('choice-anime').addEventListener('click', () => transitionTo('anime-sites'));
+        document.getElementById('choice-hentai').addEventListener('click', () => transitionTo('sites'));
+
+        document.querySelector('.anime-site-option[data-site="bato"]').addEventListener('click', (e) => {
+            const site = e.currentTarget.dataset.site;
+            mainForm.site.value = site;
+            mainForm.mode.value = 'direct';
+            let formHTML = `<h3 class="text-white mb-3">Bato.to Series</h3>
+                            <div class="mb-3">
+                                <label for="urls_or_codes" class="form-label">Enter the main series URL:</label>
+                                <input type="text" class="form-control" name="urls_or_codes" required placeholder="https://bato.to/series/...">
+                            </div>
+                            <div class="mb-3">
+                                <label for="chapter_selection" class="form-label">Chapters (optional):</label>
+                                <input type="text" class="form-control" name="chapter_selection" placeholder="e.g., 5, 8-12 (blank for all)">
+                            </div>`;
+            finalFormContent.innerHTML = formHTML;
+            document.getElementById('form-back-button').onclick = () => transitionTo('anime-sites');
+            transitionTo('form');
+        });
+        
+        // ADD the event listener for the new ImHentai sphere
+        document.querySelector('.imhentai-site-option').addEventListener('click', (e) => {
+            const site = e.currentTarget.dataset.site;
+            mainForm.site.value = site;
+            mainForm.mode.value = 'direct';
+            let formHTML = `<h3 class="text-white mb-3">ImHentai Gallery</h3>
+                            <div class="mb-3">
+                                <label for="urls_or_codes" class="form-label">Enter Gallery URLs (one per line):</label>
+                                <textarea class="form-control" name="urls_or_codes" rows="5" required placeholder="https://imhentai.xxx/gallery/..."></textarea>
+                            </div>`;
+            finalFormContent.innerHTML = formHTML;
+            document.getElementById('form-back-button').onclick = () => transitionTo('sites');
+            transitionTo('form');
+        });
+
+        document.querySelectorAll('.site-option').forEach(sphere => {
+            sphere.addEventListener('click', e => {
+                const site = e.currentTarget.dataset.site;
+                mainForm.site.value = site;
+
+                if (site === 'rule34') {
+                    mainForm.mode.value = 'tags';
+                    const formHTML = `
+                        <h3 class="text-white mb-3">Rule34 Tag Search</h3>
+                        <div class="mb-3">
+                            <label for="tag-input-field" class="form-label">Enter Tags (press Enter or comma):</label>
+                            <div id="tag-input-container" class="tag-input-container">
+                                <input type="text" id="tag-input-field" placeholder="ganyu_(genshin_impact)...">
+                            </div>
+                            <input type="hidden" name="tags">
+                        </div>
+                        <small class="form-text text-muted">This will download all posts found for the given tags.</small>`;
+                    finalFormContent.innerHTML = formHTML;
+                    setupTagInput();
+                    document.getElementById('form-back-button').onclick = () => transitionTo('sites');
+                    transitionTo('form');
+                    return;
+                }
+
+                document.getElementById('selected-site-title').textContent = e.currentTarget.querySelector('h5').textContent;
+                document.querySelector('[data-mode="tags"]').style.visibility = 'visible';
+                transitionTo('mode');
+            });
+        });
+
+        document.querySelectorAll('.mode-option').forEach(sphere => {
+            sphere.addEventListener('click', e => {
+                const mode = e.currentTarget.dataset.mode;
+                mainForm.mode.value = mode;
+                let formHTML = '';
+                if (mode === 'direct') {
+                    formHTML = `<h3 class="text-white mb-3">Direct Input</h3><div class="mb-3"><label for="urls_or_codes" class="form-label">Enter URLs or Codes (one per line):</label><textarea class="form-control" name="urls_or_codes" rows="5" required></textarea></div>`;
+                } else {
+                    formHTML = `
+                        <h3 class="text-white mb-3">Tag Search</h3>
+                        <div class="mb-3">
+                            <label for="tag-input-field" class="form-label">Enter Tags (press Enter or comma):</label>
+                            <div id="tag-input-container" class="tag-input-container">
+                                <input type="text" id="tag-input-field" placeholder="artist:sole male...">
+                            </div>
+                            <input type="hidden" name="tags">
+                        </div>
+                        <div class="mb-3">
+                            <label for="limit" class="form-label">Number of galleries:</label>
+                            <input type="number" class="form-control" name="limit" value="5" min="1" max="50" required>
+                        </div>`;
+                }
+                finalFormContent.innerHTML = formHTML;
+                if (mode === 'tags') setupTagInput();
+                document.getElementById('form-back-button').onclick = () => transitionTo('mode');
+                transitionTo('form');
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const startEl = document.querySelector('[data-group="start"]');
+            startEl.style.display = 'flex';
+            anime({ targets: startEl, scale: [0, 1], opacity: [0, 1], duration: 800 });
+        });
+    </script>
+</body>
+</html>
